@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Latency Measurement Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --success-color: #198754;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        
+        .main-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .nav-tabs {
+            border-bottom: 2px solid #dee2e6;
+            padding: 0 20px;
+            background: #f8f9fa;
+        }
+        
+        .nav-tabs .nav-link {
+            color: #6c757d;
+            font-weight: 600;
+            border: none;
+            padding: 15px 25px;
+            transition: all 0.3s;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: var(--primary-color);
+            background: rgba(13, 110, 253, 0.1);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            background: white;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        .tab-content {
+            padding: 30px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            border-radius: 15px 15px 0 0 !important;
+        }
+        
+        .btn-custom {
+            padding: 10px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .table {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .badge-latency {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 10px;
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-bottom: 15px;
+        }
+        
+        .stats-card h3 {
+            font-size: 2em;
+            margin: 10px 0;
+            font-weight: 700;
+        }
+        
+        .stats-card p {
+            margin: 0;
+            opacity: 0.9;
+        }
+        
+        .map-container {
+            width: 100%;
+            height: 600px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #dee2e6;
+        }
+        
+        #latencyChart {
+            max-height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-container">
+            <div class="header">
+                <h1><i class="bi bi-speedometer2"></i> Network Latency Measurement Tool</h1>
+                <p class="mb-0">Real-time network performance monitoring and analysis</p>
+            </div>
+            
+            <ul class="nav nav-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" data-bs-toggle="tab" href="#measurement">
+                        <i class="bi bi-activity"></i> Latency Measurement
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#history">
+                        <i class="bi bi-clock-history"></i> Historical Data
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#map">
+                        <i class="bi bi-globe"></i> Geographic View
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#settings">
+                        <i class="bi bi-gear"></i> Settings
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="tab-content">
+                <!-- Admin Warning Banner -->
+                <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                    <i class="bi bi-shield-exclamation"></i>
+                    <strong>Administrator Privileges Required!</strong> 
+                    This tool needs elevated privileges to send ICMP ping packets. 
+                    <br>
+                    <small>
+                        <strong>Windows:</strong> Run PowerShell as Administrator, then run <code>python app.py</code><br>
+                        <strong>Linux/Mac:</strong> Run <code>sudo python app.py</code>
+                    </small>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                
+                <!-- Measurement Tab -->
+                <div id="measurement" class="tab-pane fade show active">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-sliders"></i> Measurement Settings
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8 mb-3">
+                                    <label class="form-label">IP Addresses (comma separated):</label>
+                                    <input type="text" class="form-control" id="ipAddresses" 
+                                           value="8.8.8.8, 1.1.1.1, 208.67.222.222" 
+                                           placeholder="Enter IP addresses">
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label">Number of Pings:</label>
+                                    <input type="number" class="form-control" id="numPings" value="5" min="1" max="20">
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-custom" onclick="startMeasurement()">
+                                    <i class="bi bi-play-fill"></i> Start Measurement
+                                </button>
+                                <button class="btn btn-secondary btn-custom" onclick="clearData()">
+                                    <i class="bi bi-trash"></i> Clear Data
+                                </button>
+                                <button class="btn btn-success btn-custom" onclick="exportData('csv')">
+                                    <i class="bi bi-download"></i> Export CSV
+                                </button>
+                                <button class="btn btn-info btn-custom" onclick="exportData('json')">
+                                    <i class="bi bi-download"></i> Export JSON
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div id="progressContainer" class="card" style="display: none;">
+                        <div class="card-body">
+                            <h6 id="progressStatus">Initializing...</h6>
+                            <div class="progress">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Results -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-table"></i> Results
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>IP Address</th>
+                                            <th>RTT Avg</th>
+                                            <th>RTT Min/Max</th>
+                                            <th>Jitter</th>
+                                            <th>Packet Loss</th>
+                                            <th>Protocol</th>
+                                            <th>Est. Bandwidth</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="resultsTable">
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted">
+                                                No data available. Run a measurement to see results.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-bar-chart"></i> Latency Visualization (RTT Over Time)
+                        </div>
+                        <div class="card-body">
+                            <canvas id="latencyChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Network Concepts Explained -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-book"></i> Network Metrics Explained
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-clock"></i> RTT (Round Trip Time)</h6>
+                                    <p><small>Time for a packet to travel from source to destination and back. Lower is better.</small></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-activity"></i> Jitter</h6>
+                                    <p><small>Variation in latency. High jitter causes unstable connections. Should be &lt;10ms for VoIP.</small></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-exclamation-triangle"></i> Packet Loss</h6>
+                                    <p><small>Percentage of packets that fail to reach destination. Should be &lt;1% for good quality.</small></p>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-speedometer"></i> Bandwidth Estimate</h6>
+                                    <p><small>Estimated throughput based on RTT and TCP window size (BDP calculation).</small></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-shield-check"></i> Protocol</h6>
+                                    <p><small>ICMP = True ping (requires admin). TCP = Connection-based test (ports 80/443).</small></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6><i class="bi bi-diagram-3"></i> Network Quality</h6>
+                                    <p><small>Overall status based on latency, jitter, and packet loss combined.</small></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- History Tab -->
+                <div id="history" class="tab-pane fade">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-clock-history"></i> Historical Data
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <button class="btn btn-success btn-custom" onclick="exportHistory('csv')">
+                                    <i class="bi bi-download"></i> Export CSV
+                                </button>
+                                <button class="btn btn-info btn-custom" onclick="exportHistory('json')">
+                                    <i class="bi bi-download"></i> Export JSON
+                                </button>
+                                <button class="btn btn-danger btn-custom" onclick="clearHistory()">
+                                    <i class="bi bi-trash"></i> Clear History
+                                </button>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Timestamp</th>
+                                            <th>IPs Tested</th>
+                                            <th>Avg Latency</th>
+                                            <th>Packet Loss</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyTable">
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted">
+                                                No historical data available.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Map Tab -->
+                <div id="map" class="tab-pane fade">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-info-circle"></i> Instructions
+                        </div>
+                        <div class="card-body">
+                            <ol>
+                                <li>First, run a latency measurement from the 'Latency Measurement' tab</li>
+                                <li>Then click 'Generate Map' below to visualize the measured data on a world map</li>
+                                <li>The map will show actual measured latency with color-coded markers:
+                                    <ul>
+                                        <li><span class="badge bg-success">Green</span>: Low latency (&lt; 50ms)</li>
+                                        <li><span class="badge bg-warning">Orange</span>: Medium latency (50-100ms)</li>
+                                        <li><span class="badge bg-danger">Red</span>: High latency (&gt; 100ms)</li>
+                                    </ul>
+                                </li>
+                            </ol>
+                            <button class="btn btn-primary btn-custom" onclick="generateMap()">
+                                <i class="bi bi-map"></i> Generate Map from Measured Data
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-globe"></i> Map View
+                        </div>
+                        <div class="card-body">
+                            <div id="mapContainer" class="map-container">
+                                <div class="d-flex align-items-center justify-content-center h-100">
+                                    <p class="text-muted">
+                                        Run a latency measurement first, then click 'Generate Map' to visualize your results
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Settings Tab -->
+                <div id="settings" class="tab-pane fade">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-sliders"></i> General Settings
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Default Number of Pings:</label>
+                                    <input type="number" class="form-control" id="settingsDefaultPings" value="5">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Ping Timeout (seconds):</label>
+                                    <input type="number" class="form-control" id="settingsPingTimeout" value="2">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="bi bi-gear-fill"></i> Advanced Settings
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Data Storage Location:</label>
+                                <input type="text" class="form-control" id="settingsStoragePath" value="./latency_data">
+                            </div>
+                            <button class="btn btn-primary btn-custom" onclick="saveSettings()">
+                                <i class="bi bi-save"></i> Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

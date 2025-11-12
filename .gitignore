@@ -53,3 +53,7 @@ static/latency_map.html
 
 # Logs
 *.log
+
+# Auto-sync scripts
+auto-sync.bat
+auto-sync.sh
